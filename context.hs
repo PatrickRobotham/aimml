@@ -1,6 +1,29 @@
 -- Context Tree Code
 import System.Random
+import Control.Monad
 
+
+class Model m where
+  update :: m -> [Bool] -> Bool -> m
+  updateBlock :: m -> [Bool] -> [Bool] -> m
+  predict1 :: m -> [Bool] -> Bool -> Double
+  predictList :: m -> [Bool] -> [Bool] -> Double
+  genRandom :: (RandomGen g) => m -> [Bool] -> g -> (Bool,g)
+  genRandomList :: (RandomGen g) => m -> [Bool] -> g -> Int -> ([Bool],g)
+  updateBlock tree _ [] = tree
+  updateBlock tree hist (b:bs) = updateBlock newtree (b:hist) bs
+                                  where newtree = update tree hist b
+  genRandomList x hist g 0 = ([],g)
+  genRandomList x hist g n = 
+    let (b,g1) = genRandom x hist g 
+    in genRandomList (update x hist b) (b:hist) g1 (n-1)
+
+instance Model CTTree where
+  update = updateTree
+  predict1 m hist guess= fromRational $ predict m hist guess  
+  predictList m hist guesses = fromRational $ predictBlock m hist guesses
+  genRandom = genRandomBit
+  
 data CTNode = CTNode { zeroes :: Int
                      , ones  :: Int 
                      , kt :: Rational
@@ -26,8 +49,8 @@ counts x True = ones x
 ktmultiply :: CTNode -> Bool -> Rational
 ktmultiply x b = (fromIntegral (counts x b) + 1/2) / (visits x + 1)
 
-update :: CTNode -> Bool -> CTNode
-update x b = CTNode {zeroes = zeroes x + b2int (not b), 
+updateBit :: CTNode -> Bool -> CTNode
+updateBit x b = CTNode {zeroes = zeroes x + b2int (not b), 
                      ones = ones x + b2int b,
                      kt = kt x * ktmultiply x b}
 
@@ -45,7 +68,7 @@ updateTree a@(CTTree x l r) (b:bs) bit
   | leafnode a = CTTree updated l r
   | b == True  = CTTree updated (updateTree l bs bit) r
   | b == False = CTTree updated l (updateTree r bs bit)
-  where updated = update x bit 
+  where updated = updateBit x bit 
 
 updateTreeBits :: CTTree -> [Bool] -> [Bool] -> CTTree
 updateTreeBits tree _ [] = tree
@@ -59,7 +82,7 @@ depth (CTTree _ l r) = 1 + depth l
 predict :: CTTree -> [Bool] -> Bool ->  Rational
 -- The conditional probability of a bit given the history
 predict x hist b 
-  | length hist < depth x - 1 = 1/2
+  | length hist < depth x = 1/2
   | otherwise = wprob (updateTree x hist b)/ wprob x
 
 predictBlock :: CTTree -> [Bool] -> [Bool] -> Rational
@@ -93,3 +116,14 @@ makeNewContextTree n
     where
       newnode = CTNode {zeroes = 0, ones = 0, kt = 0.5}
       newchild = makeNewContextTree $ n-1
+      
+
+main = do
+  g <- getStdGen
+  putStrLn "Enter Order of Markov Model"
+  m <- (readLn :: IO Int)
+  let model = makeNewContextTree m
+  (b,g) <- return $ genRandom model [] g
+  putStrLn $ "I Guessed " ++ show b
+  -- hist <- forM (take m $ repeat 1) (\x -> readLn >>= (\y -> return $ x == y))
+          
