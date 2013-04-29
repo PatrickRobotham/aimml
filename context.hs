@@ -147,7 +147,7 @@ main = do
   m <- (readLn :: IO Int)
   let model = makeNewContextTree m
   (b,g) <- return $ genRandom model [] g
-  putStrLn $ "I Guess " ++ show b
+  guess b
   -- Get context
   context <- forM (take m $ repeat 1) 
           (\x -> 
