@@ -3,4 +3,4 @@ aimml
 
 AIMML Honors Thesis Code
 
-This is the best honours project ever!
+This is a port of Monte Carlo AIXI to Haskell
