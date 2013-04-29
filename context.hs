@@ -1,7 +1,7 @@
 -- Context Tree Code
 import System.Random
 import Control.Monad
-
+import Data.IORef
 
 class Model m where
   update :: m -> [Bool] -> Bool -> m
@@ -116,14 +116,52 @@ makeNewContextTree n
     where
       newnode = CTNode {zeroes = 0, ones = 0, kt = 0.5}
       newchild = makeNewContextTree $ n-1
-      
+
+
+guess bit = putStrLn $ "I Guess " ++ show (b2int bit) ++ ". What's the bit?"
+
+learn hist model = forever $ do
+  newStdGen
+    -- Read input
+  y <- (readLn :: IO Int)
+  bit <- return $ y == 1
+  -- Update Model
+  updatemodel hist model bit
+  -- Predict
+  h <- readIORef hist
+  x <- readIORef model
+  g <- getStdGen
+  (b,g) <- return $ genRandom x h g
+  guess b
+
+
+updatemodel hist model bit = do
+  h <- readIORef hist
+  modifyIORef model (\x -> update x h bit)
+  modifyIORef hist (bit:)
 
 main = do
+  newStdGen
   g <- getStdGen
-  putStrLn "Enter Order of Markov Model"
+  putStrLn "Enter size of pattern"
   m <- (readLn :: IO Int)
   let model = makeNewContextTree m
   (b,g) <- return $ genRandom model [] g
-  putStrLn $ "I Guessed " ++ show b
-  -- hist <- forM (take m $ repeat 1) (\x -> readLn >>= (\y -> return $ x == y))
-          
+  putStrLn $ "I Guess " ++ show b
+  -- Get context
+  context <- forM (take m $ repeat 1) 
+          (\x -> 
+            do
+            y <- (readLn :: IO Int)
+            newStdGen
+            g <- getStdGen
+            (b,g) <- return $ genRandom model [] g
+            guess b
+            return $ y == x
+          )
+  -- Start Learning
+  hist <- newIORef $ reverse context
+  model <- newIORef model
+  learn hist model
+
+    
