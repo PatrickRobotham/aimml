@@ -1,15 +1,21 @@
 -- Context Tree Code
+{-# LANGUAGE MultiParamTypeClasses #-}
+module Context (
+       Model                                                        
+) where
+
+
 import System.Random
 import Control.Monad
 import Data.IORef
 
-class Model m where
-  update :: m -> [Bool] -> Bool -> m
-  updateBlock :: m -> [Bool] -> [Bool] -> m
-  predict1 :: m -> [Bool] -> Bool -> Double
-  predictList :: m -> [Bool] -> [Bool] -> Double
-  genRandom :: (RandomGen g) => m -> [Bool] -> g -> (Bool,g)
-  genRandomList :: (RandomGen g) => m -> [Bool] -> g -> Int -> ([Bool],g)
+class Model m s where
+  update :: m -> [s] -> s -> m
+  updateBlock :: m -> [s] -> [s] -> m
+  predict1 :: m -> [s] -> s -> Double
+  predictList :: m ->[s] -> [s] -> Double
+  genRandom :: (RandomGen g) => m -> [s] -> g -> (s,g)
+  genRandomList :: (RandomGen g) => m -> [s] -> g -> Int -> ([s],g)
   updateBlock tree _ [] = tree
   updateBlock tree hist (b:bs) = updateBlock newtree (b:hist) bs
                                   where newtree = update tree hist b
@@ -18,7 +24,7 @@ class Model m where
     let (b,g1) = genRandom x hist g 
     in genRandomList (update x hist b) (b:hist) g1 (n-1)
 
-instance Model CTTree where
+instance Model CTTree Boolmain where
   update = updateTree
   predict1 m hist guess= fromRational $ predict m hist guess  
   predictList m hist guesses = fromRational $ predictBlock m hist guesses
