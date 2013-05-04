@@ -11,25 +11,27 @@ import Data.IORef
 
 class Model m s where
   update :: m -> [s] -> s -> m
-  updateBlock :: m -> [s] -> [s] -> m
-  predict1 :: m -> [s] -> s -> Double
+  updateList :: m -> [s] -> [s] -> m
+  predict :: m -> [s] -> s -> Double
   predictList :: m ->[s] -> [s] -> Double
   genRandom :: (RandomGen g) => m -> [s] -> g -> (s,g)
   genRandomList :: (RandomGen g) => m -> [s] -> g -> Int -> ([s],g)
-  updateBlock tree _ [] = tree
-  updateBlock tree hist (b:bs) = updateBlock newtree (b:hist) bs
+  updateList tree _ [] = tree
+  updateList tree hist (b:bs) = updateList newtree (b:hist) bs
                                   where newtree = update tree hist b
   genRandomList x hist g 0 = ([],g)
   genRandomList x hist g n = 
     let (b,g1) = genRandom x hist g 
     in genRandomList (update x hist b) (b:hist) g1 (n-1)
-
-instance Model CTTree Boolmain where
+  makeNewModel :: Int -> m
+  
+instance Model CTTree Bool where
   update = updateTree
-  predict1 m hist guess= fromRational $ predict m hist guess  
+  predict m hist guess= fromRational $ predict1 m hist guess  
   predictList m hist guesses = fromRational $ predictBlock m hist guesses
   genRandom = genRandomBit
-  
+  makeNewModel = makeNewContextTree
+    
 data CTNode = CTNode { zeroes :: Int
                      , ones  :: Int 
                      , kt :: Rational
@@ -85,9 +87,9 @@ depth :: CTTree -> Int
 depth Empty = 0
 depth (CTTree _ l r) = 1 + depth l
 
-predict :: CTTree -> [Bool] -> Bool ->  Rational
+predict1 :: CTTree -> [Bool] -> Bool ->  Rational
 -- The conditional probability of a bit given the history
-predict x hist b 
+predict1 x hist b 
   | length hist < depth x = 1/2
   | otherwise = wprob (updateTree x hist b)/ wprob x
 
@@ -101,7 +103,7 @@ predictBlock x hist bits
 genRandomBit :: (RandomGen g) => CTTree -> [Bool] -> g -> (Bool,g)
 -- Generates a random bit with probability taken from CTTree
 genRandomBit x hist g =
-  let p = fromRational (predict x hist True)
+  let p = fromRational (predict1 x hist True)
       (k,g1) = randomR (0 :: Double, 1) g
   in 
    (k < p, g1)
