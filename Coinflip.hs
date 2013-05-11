@@ -26,7 +26,21 @@ instance Environment CoinFlip where
   maxObservation _ = 1
   maxReward _ = 1
   makeNewEnvironment o =
-    error "fill in"
+    let 
+      prob :: Double
+      prob = read $ findWithDefault (show cDefaultProbability) "coin-flip-p" o
+      s :: StdGen
+      s = read $ findWithDefault ((show.mkStdGen) 0) "coin-flip-seed" o
+      (toss,sd) = randomR (0.0,1.0) s
+   in if not (0 <= prob && prob <= 1)
+      then error "Invalid Probability"
+      else Flipper{
+        seed = sd,
+        action = -1, -- No action read yet
+        reward = 0,
+        observation = bool2Int (toss < prob),
+        probability = prob
+        }
 
 
 data CoinFlip = Flipper{
@@ -44,3 +58,5 @@ oHeads = 1
 rLoss = 0
 rWin = 1
 cDefaultProbability = 0.7
+bool2Int False = 0
+bool2Int True = 1
