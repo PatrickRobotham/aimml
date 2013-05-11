@@ -1,0 +1,177 @@
+\documentclass[12pt,a4paper,twoside]{article}
+
+
+%-------------------------------- My STY------------------------------------------------------------------
+
+\usepackage[latin1]{inputenc}
+\usepackage{amsmath, amsthm, amssymb, amsfonts,amscd, verbatim, mathrsfs}
+\usepackage{setspace}
+\usepackage{graphicx}
+\usepackage[english]{babel}
+\usepackage[a4paper]{geometry}
+\usepackage{hyperref}
+\usepackage{enumerate}
+\usepackage{color}
+\usepackage{rotating}
+\usepackage{enumerate}
+\usepackage{graphicx}
+% \usepackage{mathtools}
+
+\geometry{top=1.3in, bottom=1.4in, left=3.55cm, right=3.55cm}
+\setlength{\parskip}{0.1cm}
+\setlength{\parindent}{0cm}
+  %------------------------------ My Environments -------------------------------------
+
+
+\newtheoremstyle{upright}%
+        {12pt plus2pt minus4pt}%
+        {14pt plus2pt minus4pt}%
+        {\upshape}%
+        {}%
+        {\bfseries\scshape\large}%
+        {}%
+        {1em}%
+                      %
+        {}%
+
+\theoremstyle{upright}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{prop}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{axiom}[theorem]{Axiom}
+\newtheorem{dfn}[theorem]{Definition}
+\newtheorem{eg}[theorem]{Example}
+\newtheorem{cor}[theorem]{Corollary}
+\newtheorem{re}[theorem]{}
+
+
+\newenvironment{prf}%
+{\noindent \ignorespaces \large\textbf{Proof}\normalsize}%
+{\qed}
+%\begin{flushright}
+%    $\blacksquare$
+%\end{flushright} \par\noindent%
+%\ignorespacesafterend
+
+\newenvironment{fr}%
+{\noindent \ignorespaces  \large\textbf{References and Further Reading}\normalsize}%
+
+
+
+%-----------------------------------My commands-------------------------------------------------------------------------
+\newcommand{\indentitem}{\setlength\itemindent{25pt}}
+\newcommand{\smallindent}{\hspace{20pt}}
+\newcommand{\midindent}{\hspace{52pt}}
+\newcommand{\bfit}[1]{\textit{\textbf{#1}}}
+\newcommand{\num}{\tag{\addtocounter{equation}{1}\arabic{equation}}}
+\newcommand{\blankpage}{\mbox{} \newpage }
+\DeclareMathOperator*{\argmax}{arg\,max}
+
+\author{Patrick Robotham}
+\title{MML Notes}
+\begin{document}
+\maketitle
+This is a collection of notes about using MML to infer a single model in the general 
+reinforcement learning problem set up.
+We can reduce this problem to that of predicting the next bit in an infinite stream
+of bits, taking in to account the bits observed previously.
+
+
+\section{Prediction Suffix Trees}
+
+We look at the class of $D$ order binary Markov Models, where $D$ is a fixed integer.
+These can be represented by prediction suffix trees.
+
+\dfn
+A \emph{prediction suffix tree} $(M,\theta)$ is a proper binary tree where each leaf node
+$l$ is equipped with a probability distribution $\theta_l$
+over $\{0,1\}$.
+
+{\bf\underline {Notation:}}
+Let $M$ be a binary tree. Let $s$ be a bitstring.
+$M_s$ is the node in $M$ reached by the following algorithm:
+
+\begin{verbatim}
+set M_s = M.root
+
+for c in s:
+    If M_s is a leaf node:
+        return M_s
+    If c == 0
+        M_s = M_s.right
+    If c == 1
+        M_s = M_s.left
+endfor
+return M_s
+
+\end{verbatim}
+
+To encode a prediction suffix tree, we must specify the tree structure $M$ and 
+encode the probabilities of the leaves $\theta$.
+
+\subsection{Calculating Probabilities With Prediction Suffix Trees}
+Let $(M, \theta)$ be a prediction suffix tree.
+Let $d$ be the depth of $M$.
+Let $s$ be a bitstring. Assume $|s| > d$. Let $n$ satisfy $d < n < s$.
+
+
+Then $Pr_M(s_{n+1} | s_{1:n})$ is calculated as follows:
+
+\begin{enumerate}
+\item Let $s' = \text{reverse}(s_{1:n})$.
+\item Return $\theta_{M_{s'}}$.
+\end{enumerate}
+
+\subsection{Coding Tree Structure}
+
+We assume we have an upper bound $D$ for the proper binary tree $M$. We then code the tree by calling the function below with $M\text{.root}$.
+(The idea of this code is that we preform a pre-order traversal, writing down 1 for internal nodes, 0 for leaf nodes of length less than D, and nothing otherwise.)
+
+\begin{verbatim}
+
+function code(node,depth){
+ if(node.leaf() == true){
+   if(depth < D){
+      message += 0;
+   }
+ } else {
+   message += 1;    
+   code(node.left, depth+1);
+   code(node.right, depth+1);
+ }
+}
+message = [];
+code(M.root, 0);
+\end{verbatim}
+
+We denote the length of this code by $\Gamma_D(M)$.
+
+\subsection{Coding Leaf Probabilities}
+
+The leaf probabilities should only depend on the data observed so far.
+
+Intuitively, each leaf of the tree is a bin to hold data. Every bit of data gets filed away in a leaf. To save space, we need only keep track of the number of 1s and 0s filed away 
+in each leaf. We do not keep track of the order.
+
+Suppose we have $a$ $1$s and $b$ $0$s filed away in a leaf $l$.
+Then the MML-Estimate (and the KT-Estimate) probability of the next bit being a $1$ is
+\[
+\theta(l) = P(1 | \text{$a$ } 1s , \text{$b$ } 0s ) = \frac{a + 1/2}{a+b+1} 
+\]
+
+Once we have the leaf probabilities, we can regard the tree as a basis for a code which
+can convey the entire history.
+
+The message length $I_1$ for a leaf $l$ that has $a$ 1s and $b$ 0s is
+
+\begin{align*}
+I_1(l) = & \frac{1}{2} \log(a+b) - (a+\frac{1}{2}) \log \theta_l - (b + \frac{1}{2})\log(1-\theta_l) \\
+& - \log {a+b \choose a} + \frac{1}{2} \log \frac{1}{12} + \frac{1}{2}
+\end{align*}
+
+(See p. 246 of Wallace 2005.)
+
+\subsection{Splitting on bits}
+
+\end{document}
