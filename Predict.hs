@@ -1,43 +1,60 @@
--- Context Tree Code
 {-# LANGUAGE MultiParamTypeClasses #-}
-module Context (
-       Model                                                        
-) where
+{-# LANGUAGE FunctionalDependencies #-}
+-- TODO:
+-- Base more closely on predict.cpp
+-- Write better comments
+-- 
 
+module Predict where
+-- Context Tree Code
 
 import System.Random
 import Control.Monad
 import Data.IORef
+import Typedefs
 
-class Model m s where
-  update :: m -> [s] -> s -> m
-  updateList :: m -> [s] -> [s] -> m
-  predict :: m -> [s] -> s -> Double
-  predictList :: m ->[s] -> [s] -> Double
-  genRandom :: (RandomGen g) => m -> [s] -> g -> (s,g)
-  genRandomList :: (RandomGen g) => m -> [s] -> g -> Int -> ([s],g)
-  updateList tree _ [] = tree
-  updateList tree hist (b:bs) = updateList newtree (b:hist) bs
-                                  where newtree = update tree hist b
-  genRandomList x hist g 0 = ([],g)
-  genRandomList x hist g n = 
-    let (b,g1) = genRandom x hist g 
-    in genRandomList (update x hist b) (b:hist) g1 (n-1)
-  makeNewModel :: Int -> m
+
+class Model m  where
+  update :: m -> Bool -> m
+  updateList :: m -> [Bool] -> m
+  updateList tree [] = tree
+  updateList tree (b:bs) = updateList newtree bs
+                                  where newtree = update tree b
+  predict :: m -> Bool -> Double
+  predictList :: m -> [Bool] -> Double
+  genRandom :: (RandomGen g) => m -> g -> (Bool,g)
+  genRandomList :: (RandomGen g) => m -> g -> Int -> ([Bool],g)
+
+  genRandomList x g 0 = ([],g)
+  genRandomList x g n = 
+    let (b,g1) = genRandom x g 
+    in genRandomList (update x b) g1 (n-1)
+  genRandomSymbolsAndUpdate :: (RandomGen g) => m -> g -> Int -> ([Symbol],g,m)
+  genRandomSymbolsAndUpdate x g 0 = ([],g,x)
+  genRandomSymbolsAndUpdate x g n = 
+    let (b,g1) = genRandom x g
+    in genRandomSymbolsAndUpdate (update x b) g1 (n-1)
+  makeNewModel :: ModelOptions -> m
+  historySize :: m -> Int
+  updateHistory :: m -> [Bool] -> m
+
+instance Model ContextTree where
+  update (ContextTree {history=h, tree = t}) b = ContextTree{history = b:h, tree = updateTree t h b}
+  predict (ContextTree{history=hist, tree = m}) guess = fromRational $ predict1 m hist guess  
+  predictList (ContextTree{history=hist, tree = m}) guesses = fromRational $ predictBlock m hist guesses
+  genRandom (ContextTree {history = h, tree =m}) g  = genRandomBit m h g
+  makeNewModel o = ContextTree{history = [], tree = makeNewContextTree (size o)}
+  historySize = length.history
+  updateHistory (ContextTree{history=h,tree=t}) hist = ContextTree{history = hist++h, tree = t}
   
-instance Model CTTree Bool where
-  update = updateTree
-  predict m hist guess= fromRational $ predict1 m hist guess  
-  predictList m hist guesses = fromRational $ predictBlock m hist guesses
-  genRandom = genRandomBit
-  makeNewModel = makeNewContextTree
-    
 data CTNode = CTNode { zeroes :: Int
                      , ones  :: Int 
                      , kt :: Rational
                      } deriving (Show)
                                                               
 data CTTree = CTTree CTNode CTTree CTTree | Empty deriving (Show)
+
+data ContextTree = ContextTree {history :: [Bool], tree :: CTTree}
 
 b2int :: Bool -> Int
 b2int False = 0
@@ -126,6 +143,10 @@ makeNewContextTree n
       newchild = makeNewContextTree $ n-1
 
 
+
+-- Begin Testing Code
+
+
 guess bit = putStrLn $ "I Guess " ++ show (b2int bit) ++ ". What's the bit?"
 
 learn hist model = forever $ do
@@ -139,22 +160,22 @@ learn hist model = forever $ do
   h <- readIORef hist
   x <- readIORef model
   g <- getStdGen
-  (b,g) <- return $ genRandom x h g
+  (b,g) <- return $ genRandomBit x h g
   guess b
 
 
 updatemodel hist model bit = do
   h <- readIORef hist
-  modifyIORef model (\x -> update x h bit)
+  modifyIORef model (\x -> updateTree x h bit)
   modifyIORef hist (bit:)
 
-main = do
+main1 = do
   newStdGen
   g <- getStdGen
   putStrLn "Enter size of pattern"
   m <- (readLn :: IO Int)
   let model = makeNewContextTree m
-  (b,g) <- return $ genRandom model [] g
+  (b,g) <- return $ genRandomBit model [] g
   guess b
   -- Get context
   context <- forM (take m $ repeat 1) 
@@ -163,7 +184,7 @@ main = do
             y <- (readLn :: IO Int)
             newStdGen
             g <- getStdGen
-            (b,g) <- return $ genRandom model [] g
+            (b,g) <- return $ genRandomBit model [] g
             guess b
             return $ y == x
           )
