@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ScopedTypeVariables, ExistentialQuantification #-}
 {-# OPTIONS_GHC -XScopedTypeVariables #-}
 module Main where
 import Typedefs
@@ -11,6 +11,9 @@ import Data.Char
 import System.Random
 import Data.Bits
 import Control.Monad
+import System.Environment
+import Util
+import Coinflip
 
 processOptions :: String -> Options
 processOptions str =
@@ -22,20 +25,24 @@ processOptions str =
                         splits = splitRegex (mkRegex "=") str
       ignore :: String -> Bool
       ignore str = head str == '#' || length str == 0
-  in (M.fromAscList . map splitEq . filter (not.ignore)
-      . map (filter (not.isSpace)) . lines) str
+      stripComments :: String -> String
+      stripComments str = head $ splitRegex (mkRegex "#") str
+  in (M.fromList . map splitEq . filter (not.ignore)
+      . map (filter (not.isSpace)) . map stripComments . lines) str
       
                                
 mainloop :: (Agent a, Environment e, Model m) => a -> m -> e -> 
             Options -> IO ()
 mainloop ai model env opts = do
   -- Get options
-  seed  <- (return.read) $ M.findWithDefault "random-seed" "0" opts :: IO Int
-  verbose <- (return.read) $ M.findWithDefault "verbose" "False" opts :: IO Bool
+  seed  <- (return.read) $ M.findWithDefault "0" "random-seed" opts :: IO Int
+  print seed
+  verbose <- return $ M.findWithDefault "False" "verbose" opts == "true" :: IO Bool
   -- There's some exploration options which I ignore
-  aiage <- (return.read) $ M.findWithDefault "terminate-age" "0"  opts:: IO Int
+  aiage <- (return.read) $ M.findWithDefault "0" "terminate-age"  opts:: IO Int
   learningPeriod <- (return.read) $ 
-                    M.findWithDefault "learning-period" "0" opts :: IO Int 
+                    M.findWithDefault "0" "learning-period" opts :: IO Int 
+  print "test"
   interactionLoop (mkStdGen seed) ai model env 1 verbose aiage
 
 powerof2 :: Int -> Bool
@@ -44,8 +51,8 @@ powerof2 x = x .&. (x-1) == 0
 
 interactionLoop g a m e counter verbose aiage  =
   if isFinished e || age a > aiage
-  then finish a
-  else  do  
+  then finish a 
+  else do
     -- Get a percept from the environment
     o <- return (getObservation e)  
     r <- return $ getReward e
@@ -77,5 +84,41 @@ finish a =
     putStrLn $ "agent age: " ++ (show.age) a 
     putStrLn $ "average reward: " ++ (show . averageReward) a
     
+environmentReader :: Options -> CoinFlip
+environmentReader o 
+  | getRequiredOption "environment" o  == "coin-flip" = makeNewEnvironment o  
+--  where name = Util.getRequiredOption "environment" o
+
 main :: IO ()
-main = print "Fill this in Patrick!"
+main = do
+  args <- getArgs
+  when (length args > 2 || null args)
+    (error $   
+     "Incorrect number of arguments \n" ++
+     "The first argument should indicate the location of the" ++
+     "configuration file and the second (optional) argument" ++ 
+     " should indicate the file to log to"
+    )
+  -- Default configuration values
+  defaults <- return $  
+              M.fromList [("ct-depth","30"),
+                          ("agent-horizon","5"),
+                          ("exploration","0.0"),
+                          ("explore-decay","1.0"),
+                          ("mc-simulations","300")]
+  
+  -- read configuration options
+  conf <- readFile $ head args
+  options <- return $ processOptions conf
+  options <- return $ M.union options defaults 
+  -- Set up environment
+  e <- return $ environmentReader options 
+  -- Set up model
+  m <- return $ makeNewModel options :: IO ContextTree
+  -- Set up agent
+  a <- return $ makeAgent options :: IO AgentA
+  -- Run main agent/environment interaction loop
+  mainloop a m e options
+  -- TODO deal with logger (it's the second argument)  
+
+    
