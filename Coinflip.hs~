@@ -1,0 +1,18 @@
+import Environment
+module Coinflip 
+-- Based on Coinflip.cpp
+
+(CoinFlip,
+ performAction,
+ maxAction,
+ maxObservation,
+ maxReward,
+ print,
+ Tails,
+ Heads,
+ OTails,
+ OHeads,
+ RLoss,
+ RWin)
+
+where

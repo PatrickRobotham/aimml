@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.1415926-2.4-1.40.13 (TeX Live 2012) (format=pdflatex 2012.6.30)  1 MAY 2013 13:17
+This is pdfTeX, Version 3.1415926-2.4-1.40.13 (TeX Live 2012) (format=pdflatex 2012.6.30)  23 MAY 2013 20:49
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -489,15 +489,9 @@ Package atveryend Info: Empty hook `AfterLastShipout' on input line 390.
  (./AIXInotes.aux)
 Package atveryend Info: Executing hook `AtVeryEndDocument' on input line 390.
 Package atveryend Info: Executing hook `AtEndAfterFileList' on input line 390.
+Package rerunfilecheck Info: File `AIXInotes.out' has not changed.
+(rerunfilecheck)             Checksum: 1E38090470FBFF7D547F0C7607C36E9C;1328.
 
-
-Package rerunfilecheck Warning: File `AIXInotes.out' has changed.
-(rerunfilecheck)                Rerun to get outlines right
-(rerunfilecheck)                or use package `bookmark'.
-
-Package rerunfilecheck Info: Checksums for `AIXInotes.out':
-(rerunfilecheck)             Before: 38526BC609C38615642667518CD4F33C;1261
-(rerunfilecheck)             After:  1E38090470FBFF7D547F0C7607C36E9C;1328.
 
 LaTeX Font Warning: Some font shapes were not available, defaults substituted.
 
@@ -506,7 +500,7 @@ Package atveryend Info: Empty hook `AtVeryVeryEnd' on input line 390.
 Here is how much of TeX's memory you used:
  7075 strings out of 493488
  101128 string characters out of 3141326
- 195582 words of memory out of 3000000
+ 195686 words of memory out of 3000000
  10213 multiletter control sequences out of 15000+200000
  15054 words of font info for 62 fonts, out of 3000000 for 9000
  957 hyphenation exceptions out of 8191

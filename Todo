@@ -1,0 +1,9 @@
+Make a haskell file for each C++ file.
+Make each haskell file a module.
+Make a module for every typedefinition and typeclass
+Base what the module exports on the .hpp from the C++ file.
+
+
+Add logging capability
+Rewrite Agent.hs, Predict.hs and Environment.hs to make agents / environments based on 
+an Options

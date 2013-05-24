@@ -1,7 +1,6 @@
 > module Typedefs where
 > import Data.Map
 > import Data.BitVector
-> import Data.List
 > type Symbol = Bool
 
 The symbols that can be predicted
@@ -38,6 +37,5 @@ The progam's keyword/value option pairs.
 
 > data ModelOptions = ModelOptions {size :: Int}
 
-> argmax :: (Ord b) => (a->b) -> [a] -> a
-> argmax f lst = (fst . maximumBy (\ x y -> compare (snd x) (snd y))) 
->  $ zip lst (Prelude.map f lst)
+> argmax :: (Ord b) => (a->b) -> [a] -> [a]
+> argmax f lst = (fst . maximumBy (compare.snd)) $ zip lst (Prelude.map f lst)
