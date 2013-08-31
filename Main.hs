@@ -1,10 +1,12 @@
 {-# LANGUAGE ScopedTypeVariables, ExistentialQuantification #-}
 {-# OPTIONS_GHC -XScopedTypeVariables #-}
 module Main where
-import Typedefs
-import Agent
+import Search
+import Util
 import Environment
-import Predict
+import Coinflip
+import ContextTree
+import Model
 import qualified Data.Map as M
 import Text.Regex
 import Data.Char
@@ -13,9 +15,13 @@ import Data.Bits
 import Control.Monad
 import System.Environment
 import Util
-import Coinflip
+import Control.Monad.State
+import World
+
+
 
 processOptions :: String -> Options
+-- Reads a configuration file
 processOptions str =
   let splitEq :: String -> (String,String)                         
       splitEq str = if length splits == 2    
@@ -28,66 +34,61 @@ processOptions str =
       stripComments :: String -> String
       stripComments str = head $ splitRegex (mkRegex "#") str
   in (M.fromList . map splitEq . filter (not.ignore)
-      . map (filter (not.isSpace)) . map stripComments . lines) str
-      
-                               
-mainloop :: (Agent a, Environment e, Model m) => a -> m -> e -> 
-            Options -> IO ()
-mainloop ai model env opts = do
-  -- Get options
-  seed  <- (return.read) $ M.findWithDefault "0" "random-seed" opts :: IO Int
-  print seed
-  verbose <- return $ M.findWithDefault "False" "verbose" opts == "true" :: IO Bool
-  -- There's some exploration options which I ignore
-  aiage <- (return.read) $ M.findWithDefault "0" "terminate-age"  opts:: IO Int
-  learningPeriod <- (return.read) $ 
-                    M.findWithDefault "0" "learning-period" opts :: IO Int 
-  print "test"
-  interactionLoop (mkStdGen seed) ai model env 1 verbose aiage
+      . map (filter (not.isSpace)) . map stripComments . 
+      filter (not.ignore) . lines) str
+     
 
 powerof2 :: Int -> Bool
 -- Checks whether x == 2^n for some n
 powerof2 x = x .&. (x-1) == 0
 
-interactionLoop g a m e counter verbose aiage  =
-  if isFinished e || age a > aiage
-  then finish a 
-  else do
-    -- Get a percept from the environment
-    o <- return (getObservation e)  
-    r <- return $ getReward e
-    -- Update agent's environment model with the new percept   
-    (m,a) <- return $ modelUpdate (m,a) e (o,r)
-    -- Determine best action
-    (action, g) <- return $ search g a m e
-    -- Send action to environment
-    e <- return $ performAction action e
-    -- Update agent's environment model
-    (m,a) <- return $ modelUpdate2 (m,a) e action
-    -- Log turn
-    -- TODO FILL IN
-    -- Print to standard output when counter == 2^n or verbose
-    when (verbose || powerof2 counter) $
-      do 
-        putStrLn $ "cycle: " ++ show counter
-        putStrLn $ "average reward: " ++ show (averageReward a)
-        return ()
-    when verbose $ print e
-    -- Update explore rate
-    -- TODO Fill in
-    interactionLoop g a m e (succ counter) verbose aiage
-    
-finish :: (Agent a) => a -> IO ()
-finish a = 
-  do
-    putStrLn "\n \n SUMMARY"
-    putStrLn $ "agent age: " ++ (show.age) a 
-    putStrLn $ "average reward: " ++ (show . averageReward) a
-    
-environmentReader :: Options -> CoinFlip
+environmentReader :: Options -> EnvironmentP
 environmentReader o 
-  | getRequiredOption "environment" o  == "coin-flip" = makeNewEnvironment o  
---  where name = Util.getRequiredOption "environment" o
+  | getRequiredOption "environment" o  == "coin-flip" =  
+    EnvironmentP (makeNewEnvironment o :: CoinFlip)
+
+modelMaker :: Options -> ModelP
+-- TODO: Add option for Hoeffding Trees
+modelMaker o = ModelP(makeNewModel o :: ContextTree)
+
+interactionLoop counter verbose aiage = do
+  e <- gets env
+  a <- gets agent
+  when (isFinished e || age a > aiage)
+    finish
+  -- Print Environment
+  liftIO $ print e
+  -- Determine best action
+  act <- search
+  actE <- encodeAction act
+  liftIO $ print actE
+  -- Perform Action
+  modifyEnvironment (performAction act)
+  -- Update agent's environment model
+  updateModelAction act
+  -- Get a percept from the environment
+  o <- gets (getObservation.env) 
+  r <- gets (getReward.env)
+  or <- encodePercept (o,r)
+  liftIO $ print or
+  -- Update agent's environment model with new percept
+  updateModelPercept (o,r)
+  -- print to standard output when counter == 2^n or verbose
+  when (verbose || powerof2 counter) $
+    do 
+      a <- gets agent
+      liftIO $ do 
+        putStrLn $ "cycle:" ++ show counter;
+        putStrLn $ "average reward: " ++ show (averageReward a)
+  interactionLoop (succ counter) verbose aiage
+  
+finish :: World ()
+finish = do
+  a <- gets agent
+  e <- gets env
+  liftIO $ putStrLn "\n \n SUMMARY"
+  liftIO $ putStrLn $ "agent age: " ++ (show.age) a
+  liftIO $ putStrLn $ "average reward:" ++ (show . averageReward) a
 
 main :: IO ()
 main = do
@@ -98,27 +99,39 @@ main = do
      "The first argument should indicate the location of the" ++
      "configuration file and the second (optional) argument" ++ 
      " should indicate the file to log to"
-    )
+    )      
   -- Default configuration values
-  defaults <- return $  
-              M.fromList [("ct-depth","30"),
-                          ("agent-horizon","5"),
-                          ("exploration","0.0"),
-                          ("explore-decay","1.0"),
-                          ("mc-simulations","300")]
-  
+  let defaults =  
+        M.fromList [("ct-depth","30"),
+                    ("agent-horizon","5"),
+                    ("exploration","0.0"),
+                    ("explore-decay","1.0"),
+                    ("mc-simulations","300")]
   -- read configuration options
   conf <- readFile $ head args
-  options <- return $ processOptions conf
-  options <- return $ M.union options defaults 
+  let options = M.union (processOptions conf) defaults
   -- Set up environment
-  e <- return $ environmentReader options 
-  -- Set up model
-  m <- return $ makeNewModel options :: IO ContextTree
+  let e = environmentReader options
   -- Set up agent
-  a <- return $ makeAgent options :: IO AgentA
-  -- Run main agent/environment interaction loop
-  mainloop a m e options
-  -- TODO deal with logger (it's the second argument)  
-
-    
+  let a = makeAgent options
+  -- Set up model
+  let m = modelMaker options
+  g <- getStdGen
+  verbose <- return $ M.findWithDefault "False" "verbose" options == "true"
+  -- There's some exploration options which I ignore
+  aiage <- (return.read) $ M.findWithDefault "0" "terminate-age" options :: IO Int
+  -- Set up state of world
+  let world = WorldState{
+        env = e,
+        agent = a, 
+        model = m,
+        tree = M.empty,
+        gen = g,
+        history = [],
+        reward = 0,
+        sampleReward = 0
+        }
+  -- Run interaction loop
+  worldEnd <- execStateT (interactionLoop 1 verbose aiage) world
+  -- Finish
+  return ()

@@ -1,5 +1,6 @@
+{-# LANGUAGE ExistentialQuantification #-}
 module Environment where
-import Typedefs
+import Util
 import Data.BitVector
 
 class (Show e) => Environment e where   
@@ -38,3 +39,29 @@ class (Show e) => Environment e where
       isValidReward :: e -> Percept -> Bool
       isValidReward e per = (minReward e) <= per && per <= (maxReward e)
       makeNewEnvironment :: Options -> e
+      
+
+data EnvironmentP = forall a. Environment a => EnvironmentP a 
+
+instance Show EnvironmentP where
+  show (EnvironmentP e) = show e
+  
+instance Environment EnvironmentP where
+  performAction a (EnvironmentP e) = EnvironmentP (performAction a e)
+  isFinished (EnvironmentP e) = isFinished e
+  getObservation (EnvironmentP e) = getObservation e
+  getReward (EnvironmentP e) = getReward e
+  actionBits (EnvironmentP e) = actionBits e
+  observationBits (EnvironmentP e) = observationBits e
+  rewardBits (EnvironmentP e) = rewardBits e
+  perceptBits (EnvironmentP e) = perceptBits e
+  maxAction (EnvironmentP e) = maxAction e
+  maxObservation (EnvironmentP e) = maxObservation e
+  maxReward (EnvironmentP e) = maxReward e
+  minAction (EnvironmentP e) = minAction e
+  minObservation (EnvironmentP e) = minObservation e
+  minReward (EnvironmentP e) = minReward e
+  isValidAction (EnvironmentP e) = isValidAction e
+  isValidObservation (EnvironmentP e) = isValidObservation e
+  isValidReward (EnvironmentP e) = isValidReward e
+  makeNewEnvironment opts = error "EnvironmentP is an abstract type"

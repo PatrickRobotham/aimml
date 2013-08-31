@@ -3,7 +3,7 @@ where
 import Environment
 import System.Random
 import Data.Map
-import Typedefs
+import Util
 
 instance Show CoinFlip where
   show c = 
@@ -32,15 +32,15 @@ instance Environment CoinFlip where
       s :: StdGen
       s = read $ findWithDefault ((show.mkStdGen) 0) "coin-flip-seed" o
       (toss,sd) = randomR (0.0,1.0) s
-   in if not (0 <= prob && prob <= 1)
-      then error "Invalid Probability"
-      else Flipper{
-        seed = sd,
-        action = -1, -- No action read yet
-        reward = 0,
-        observation = bool2Int (toss < prob),
-        probability = prob
-        }
+    in if not (0 <= prob && prob <= 1)
+       then error "Invalid Probability"
+       else Flipper{
+         seed = sd,
+         action = -1, -- No action read yet
+         reward = 0,
+         observation = bool2Int (toss < prob),
+         probability = prob
+         }
 
 
 data CoinFlip = Flipper{
@@ -57,6 +57,6 @@ oTails = 0
 oHeads = 1
 rLoss = 0
 rWin = 1
-cDefaultProbability = 0.7
+cDefaultProbability = 1
 bool2Int False = 0
 bool2Int True = 1
