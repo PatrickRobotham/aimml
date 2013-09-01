@@ -71,8 +71,12 @@ interactionLoop counter verbose aiage = do
   r <- gets (getReward.env)
   or <- encodePercept (o,r)
   liftIO $ print or
-  -- Update agent's environment model with new percept
+  -- Update agent with new percept
   updateModelPercept (o,r)
+  a <- gets agent
+  let a' = a{age = (age a) + 1,
+             totalReward = (totalReward a) + fromIntegral r}
+  modify (\x -> x{agent = a'})
   -- print to standard output when counter == 2^n or verbose
   when (verbose || powerof2 counter) $
     do 
