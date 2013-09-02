@@ -1,6 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables, ExistentialQuantification #-}
 {-# OPTIONS_GHC -XScopedTypeVariables #-}
 module Main where
+
 import Search
 import Util
 import Environment
@@ -54,14 +55,12 @@ modelMaker o = ModelP(makeNewModel o :: ContextTree)
 interactionLoop counter verbose aiage = do
   e <- gets env
   a <- gets agent
-  when (isFinished e || age a > aiage)
-    finish
+  when (isFinished e || age a > aiage) finish
   -- Print Environment
   liftIO $ print e
   -- Determine best action
   act <- search
   actE <- encodeAction act
-  liftIO $ print actE
   -- Perform Action
   modifyEnvironment (performAction act)
   -- Update agent's environment model
@@ -70,7 +69,6 @@ interactionLoop counter verbose aiage = do
   o <- gets (getObservation.env) 
   r <- gets (getReward.env)
   or <- encodePercept (o,r)
-  liftIO $ print or
   -- Update agent with new percept
   updateModelPercept (o,r)
   a <- gets agent
@@ -93,7 +91,7 @@ finish = do
   liftIO $ putStrLn "\n \n SUMMARY"
   liftIO $ putStrLn $ "agent age: " ++ (show.age) a
   liftIO $ putStrLn $ "average reward:" ++ (show . averageReward) a
-
+  return ()
 main :: IO ()
 main = do
   args <- getArgs

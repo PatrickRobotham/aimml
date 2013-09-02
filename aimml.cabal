@@ -1,0 +1,19 @@
+Name:	aimml
+Version: 0.1
+
+Synopsis: AIXI + Machine Learning Algorithms
+Description: An Artifical Intelligence Library based on AIXI that allows for different learning algorithms to be used
+Author: Patrick Robotham
+Maintainer: patrick.robotham2@gmail.com
+build-type: Simple
+Cabal-Version: >= 1.9.2
+executable aimml
+  main-is: Main.hs
+  build-depends: base, 
+                 containers, 
+                 mtl,
+                 random,
+                 bv,
+                 regex-compat,
+                 random-extras,
+                 random-fu
