@@ -20,11 +20,11 @@ class (Show e) => Environment e where
       perceptBits :: e -> Int
       perceptBits e = observationBits e + rewardBits e
       maxAction :: e -> Action
-      maxAction _ = 0
+      --maxAction _ = 0
       maxObservation :: e -> Percept
-      maxObservation _ = 0
+      --maxObservation _ = 0
       maxReward :: e -> Percept
-      maxReward _ = 0
+      --maxReward _ = 0
       minAction :: e -> Action
       minAction _ = 0
       minObservation :: e -> Percept

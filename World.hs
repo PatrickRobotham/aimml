@@ -13,6 +13,10 @@ import Control.Monad.State
 import Control.Monad.Reader
 import Data.Map (Map)
 import Text.Show
+import qualified Data.HashTable.IO as H
+
+type HashTable k v = H.BasicHashTable k v
+
 
 data Agent = Agent {
   age :: Int,
@@ -24,7 +28,7 @@ data Agent = Agent {
 
 data NodeType = Chance | Decision deriving (Show,Eq)
 
-type SearchTree = Map [Bool] SearchNode -- Use HashTable Instead?
+type SearchTree = HashTable [Bool] SearchNode -- Use HashTable Instead?
 
 data SearchNode = SearchNode {
   rewardEstimate :: Double,

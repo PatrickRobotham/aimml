@@ -5,7 +5,7 @@
 {-# OPTIONS -XScopedTypeVariables #-}
 
 -- Performance Notes:
--- Replace Map with HashTable
+-- Replace Map with HashTable <<<<----- TOP PRIORITY!!!!
 -- Replace History with Dequeue
 
 module Search where
@@ -18,10 +18,16 @@ import Control.Monad.State
 import Control.Monad.Identity ( )
 import System.Random (StdGen, randomR)
 import Data.Map (Map, findWithDefault, insertWith, insert, empty)
+import Data.HashTable ()
 import Data.BitVector
-import Data.List (maximumBy)
-import Data.Random (sampleState)
-import Data.Random.Extras (choice)
+import Data.List (maximumBy,groupBy)
+import Data.Maybe(fromMaybe)
+import qualified Data.HashTable.IO as H
+
+type HashTable k v = H.LinearHashTable k v
+
+--import Data.Random (sampleState)
+--import Data.Random.Extras (choice)
 
 explorationConstant = 2.0
 
@@ -38,10 +44,10 @@ modifyEnvironment f = do
   e <- gets env
   modify (\x -> x{env = f e})
 
-modifyTree :: (SearchTree -> SearchTree) -> World ()
-modifyTree f = do
-  tr <- gets tree
-  modify (\x ->x{tree = f tr})
+--modifyTree :: (SearchTree -> SearchTree) -> World ()
+--modifyTree f = do
+-- tr <- gets tree
+--  modify (\x ->x{tree = f tr})
 
 modifyReward :: (Integer -> Integer) -> World ()
 modifyReward f = do
@@ -126,13 +132,21 @@ averageReward x = if age x > 0
                   else 0
 
 
-
+lookupWithDefault :: SearchNode -> [Bool] -> SearchTree -> World SearchNode
+lookupWithDefault dft key h = liftIO $
+  do
+    old <- H.lookup h key
+    let new = fromMaybe dft old
+    return new
+    
 newSearchNode :: NodeType -> SearchNode
 newSearchNode t = SearchNode {
   rewardEstimate = 0,
   visits = 0,
   nodeType = t
   }
+
+
 
 updateNodePercept :: (Percept,Percept) -> World ()
 -- Modifies the search tree
@@ -141,9 +155,10 @@ updateNodePercept (o,r) = do
   h <- gets history
   tr <- gets tree
   let hor = h ++ or
-  let n = findWithDefault (newSearchNode Decision) hor tr
-  modify (\x -> x{tree = insertWith (flip const) hor n tr,
-                  history = hor})
+  n0 <- liftIO $ H.lookup tr hor
+  let n = fromMaybe (newSearchNode Decision) n0
+  safeInsert tr hor n
+  modify (\x -> x{history = hor})
   return ()
 
 updateNodeAction :: Action -> World ()
@@ -153,9 +168,9 @@ updateNodeAction a = do
   h <- gets history
   tr <- gets tree
   let ha = h ++ act
-  let n = findWithDefault (newSearchNode Chance) ha tr
-  modify (\x -> x{tree = insertWith (flip const) ha n tr,
-                  history = ha})
+  n <- lookupWithDefault (newSearchNode Chance) ha tr
+  safeInsert tr ha n 
+  modify (\x -> x{history = ha})
   return ()
 
 updateModelAction :: Action -> World ()
@@ -180,28 +195,43 @@ genPercept = do
   return (o,r)
 
 
-argmax :: (Ord b) => (a->b) -> [a] -> a -- Implement random tie-breaking?
-argmax f lst = maximumBy (\x y -> compare (f x) (f y)) lst
+argmax :: (Ord b) => (a->b) -> [a] -> [a]
+argmax f lst =  
+  maximumBy (\x y -> compare (f $ head x) (f $ head y)) $
+  groupBy (\x y -> f x == f y) lst
 
+argmaxM f lst =
+  do
+    vals <- mapM f lst
+    
+    (return.map fst . argmax snd) (zip lst vals)
 
 getRandom :: [a] -> World a
 getRandom l = do
   g <- gets gen
-  let (x,g1) = sampleState (choice l) g
+  let (i,g1) = randomR (0,length l - 1) g
   modify (\x -> x{gen = g1})
-  return x
+  return $ l!!i
 
+getRandomM :: World [a] -> World a
+getRandomM x = x >>= getRandom
 
 tee :: [Bool] -> World Int
 tee h = do
   tr <- gets tree
-  let n = findWithDefault (newSearchNode Decision) h tr
+  n <- lookupWithDefault (newSearchNode Decision) h tr
   return $ visits n
 
 veehat h = do
   tr <- gets tree
-  let n = findWithDefault (newSearchNode Decision) h tr
+  n <- lookupWithDefault (newSearchNode Decision) h tr
   return $ rewardEstimate n
+
+-- inserts a value only if it doesn't overwrite
+safeInsert h key new = liftIO $
+  do
+  old <- H.lookup h key
+  H.insert h key (fromMaybe new old)
 
 --------------------------------------------------------------------------------
 -- The Main Algorithm
@@ -214,20 +244,24 @@ selectAction = do
   e <- gets env
   tr <- gets tree
   h <- gets history
-  let n = findWithDefault (newSearchNode Decision) h tr
+  n <- lookupWithDefault (newSearchNode Decision) h tr
   let actions = [minAction e .. maxAction e]
-  let getNode :: Action -> SearchNode
-      getNode a = findWithDefault (newSearchNode Chance) 
+  let getNode :: Action ->  World SearchNode
+      getNode a = lookupWithDefault (newSearchNode Chance) 
                   (h ++ encodeActionP e a) tr
-  let u = [a | a <- actions ,  (visits $ getNode a) == 0]
-  let estval :: Action -> Double
-      estval x = (rewardEstimate.getNode) x
-                 + explorationConstant
-                 * sqrt((log.fromIntegral.visits) n
-                        /(log.fromIntegral.visits.getNode) x)
+  u <- filterM (\a -> do{nod <- getNode a; return $ visits nod == 0}) actions
+  let estval :: Action -> World Double
+      estval x = do
+        child <- getNode x
+        return $
+          rewardEstimate n
+          + explorationConstant
+          * sqrt((log.fromIntegral.visits) n
+                 /(log.fromIntegral.visits) child)
   if not (null u) 
     then getRandom u
-    else return$ argmax estval actions
+    else getRandomM $ argmaxM estval actions
+         
 rollout :: Int -> World Reward
 rollout 0 = do
   r <- gets reward
@@ -247,7 +281,7 @@ sample 0 = return 0
 sample n = do
   h <- gets history
   tr <- gets tree
-  let nh = findWithDefault (newSearchNode Decision) h tr
+  nh <- lookupWithDefault (newSearchNode Decision) h tr
   when (chanceNode nh) (
     do
       (o,r) <- genPercept
@@ -274,7 +308,8 @@ sample n = do
   let th' = fromIntegral th
   let nh' = nh{rewardEstimate = 1/(th' + 1) * (rew + th' * vh),
                visits = th + 1}
-  modifyTree (\x -> insert h nh' x)
+  tr1 <- gets tree
+  liftIO $ H.insert tr1 h nh'
   return rew
 
 
@@ -286,7 +321,9 @@ search = do
   hz <- gets (horizon.agent)
   n <- gets (simulations.agent)
   e <- gets env
-  modify(\x -> x{tree = insert h (newSearchNode Chance) empty,
+  ht <- liftIO $ H.new
+  liftIO $ H.insert ht h (newSearchNode Chance)
+  modify(\x -> x{tree = ht,
                  history = h})
   -- Sample Repeatedly
   forM_ [1.. n] (\_ ->
@@ -296,8 +333,11 @@ search = do
     )
   tr <- gets tree
   -- Find Best Action
-  let getEst a =
-        rewardEstimate $ 
-        findWithDefault (newSearchNode Chance) (h ++ encodeActionP e a) tr
+  let
+    getEst :: Action -> World Double
+    getEst a =
+        liftM rewardEstimate $ 
+        lookupWithDefault (newSearchNode Chance) (h ++ encodeActionP e a) tr
   let actions = [0 .. maxAction e]
-  return $ argmax getEst actions
+  choices <- argmaxM getEst actions
+  getRandom choices

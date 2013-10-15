@@ -6,6 +6,7 @@ import Search
 import Util
 import Environment
 import Coinflip
+import Pacman
 import ContextTree
 import Model
 import qualified Data.Map as M
@@ -18,6 +19,11 @@ import System.Environment
 import Util
 import Control.Monad.State
 import World
+import System.Exit
+import qualified Data.HashTable.IO as H
+
+type HashTable k v = H.LinearHashTable k v
+
 
 
 
@@ -47,7 +53,8 @@ environmentReader :: Options -> EnvironmentP
 environmentReader o 
   | getRequiredOption "environment" o  == "coin-flip" =  
     EnvironmentP (makeNewEnvironment o :: CoinFlip)
-
+  | getRequiredOption "environment" o == "pacman" =
+      EnvironmentP (makeNewEnvironment o :: Pacman)
 modelMaker :: Options -> ModelP
 -- TODO: Add option for Hoeffding Trees
 modelMaker o = ModelP(makeNewModel o :: ContextTree)
@@ -55,7 +62,7 @@ modelMaker o = ModelP(makeNewModel o :: ContextTree)
 interactionLoop counter verbose aiage = do
   e <- gets env
   a <- gets agent
-  when (isFinished e || age a > aiage) finish
+ 
   -- Print Environment
   liftIO $ print e
   -- Determine best action
@@ -82,7 +89,9 @@ interactionLoop counter verbose aiage = do
       liftIO $ do 
         putStrLn $ "cycle:" ++ show counter;
         putStrLn $ "average reward: " ++ show (averageReward a)
-  interactionLoop (succ counter) verbose aiage
+  when (not $ isFinished e || age a > aiage) $
+    interactionLoop (succ counter) verbose aiage
+  finish
   
 finish :: World ()
 finish = do
@@ -91,7 +100,6 @@ finish = do
   liftIO $ putStrLn "\n \n SUMMARY"
   liftIO $ putStrLn $ "agent age: " ++ (show.age) a
   liftIO $ putStrLn $ "average reward:" ++ (show . averageReward) a
-  return ()
 main :: IO ()
 main = do
   args <- getArgs
@@ -123,11 +131,12 @@ main = do
   -- There's some exploration options which I ignore
   aiage <- (return.read) $ M.findWithDefault "0" "terminate-age" options :: IO Int
   -- Set up state of world
+  tr <- H.new
   let world = WorldState{
         env = e,
         agent = a, 
         model = m,
-        tree = M.empty,
+        tree = tr,
         gen = g,
         history = [],
         reward = 0,

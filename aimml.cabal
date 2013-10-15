@@ -12,8 +12,8 @@ executable aimml
   build-depends: base, 
                  containers, 
                  mtl,
-                 random,
                  bv,
                  regex-compat,
-                 random-extras,
-                 random-fu
+                 text,
+                 random,
+                 hashtables
